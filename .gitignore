@@ -121,3 +121,9 @@ graph.json
 graph.html
 GRAPH_REPORT.md
 old_graphs/
+
+# Clicky Event Tracker
+packages/clicky/DerivedData/
+packages/clicky/build/
+packages/clicky/.build/
+packages/clicky/leanring-buddy/build/

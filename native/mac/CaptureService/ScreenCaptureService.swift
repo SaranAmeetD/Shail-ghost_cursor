@@ -151,8 +151,90 @@ class ScreenCaptureService {
         
         if type == "request_frames" {
             handleFrameRequest(dict, connection: connection)
+        } else if type == "request_png_base64" {
+            handlePNGRequest(dict, connection: connection)
         }
     }
+
+    private func handlePNGRequest(_ message: [String: Any], connection: NWConnection) {
+        let requestId = (message["request_id"] as? String) ?? UUID().uuidString
+        
+        Task {
+            do {
+                let availableContent = try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: true
+                )
+                
+                guard let display = availableContent.displays.first else {
+                    sendErrorResponse(requestId: requestId, message: "No displays found", connection: connection)
+                    return
+                }
+                
+                let config = SCStreamConfiguration()
+                config.width = display.width
+                config.height = display.height
+                config.showsCursor = true
+                
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                
+                let cgImage = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: config
+                )
+                
+                guard let pngData = compressToPNG(cgImage) else {
+                    sendErrorResponse(requestId: requestId, message: "PNG compression failed", connection: connection)
+                    return
+                }
+                
+                let base64String = pngData.base64EncodedString()
+                
+                let response: [String: Any] = [
+                    "type": "png_response",
+                    "request_id": requestId,
+                    "data_b64": base64String,
+                    "status": "ok"
+                ]
+                
+                if
+                    let jsonData = try? JSONSerialization.data(withJSONObject: response),
+                    let jsonString = String(data: jsonData, encoding: .utf8)
+                {
+                    await streamer?.sendJSON(jsonString, to: connection)
+                }
+            } catch {
+                sendErrorResponse(requestId: requestId, message: "Capture failed: \(error)", connection: connection)
+            }
+        }
+    }
+    
+    private func compressToPNG(_ image: CGImage) -> Data? {
+        let bitmapRep = NSBitmapImageRep(cgImage: image)
+        return bitmapRep.representation(
+            using: .png,
+            properties: [:]
+        )
+    }
+    
+    private func sendErrorResponse(requestId: String, message: String, connection: NWConnection) {
+        let response: [String: Any] = [
+            "type": "png_response",
+            "request_id": requestId,
+            "status": "error",
+            "message": message
+        ]
+        
+        if
+            let jsonData = try? JSONSerialization.data(withJSONObject: response),
+            let jsonString = String(data: jsonData, encoding: .utf8)
+        {
+            Task {
+                await streamer?.sendJSON(jsonString, to: connection)
+            }
+        }
+    }
+
     
     private func handleFrameRequest(_ message: [String: Any], connection: NWConnection) {
         let requestId = (message["request_id"] as? String) ?? UUID().uuidString

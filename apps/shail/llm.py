@@ -266,13 +266,23 @@ async def call_llm(
     user_id: Optional[str] = None,
     context: str = "",
     system_prompt: str = "",
+    model: Optional[str] = None,
 ) -> Tuple[str, dict]:
     """Non-streaming call. Returns (answer, meta) where meta includes the
     provider/model that actually answered (after any fallback).
     """
     cfg = get_user_llm_config(user_id)
+    if model:
+        cfg["model"] = model
     sys_content = _build_system_content(system_prompt, context)
     msgs = _ensure_messages(messages)
+
+    # Sprint 1.2: Check if any message contains multimodal inputs (images key)
+    has_images = any("images" in m for m in msgs)
+    if has_images and cfg["provider"] != PROVIDER_OLLAMA:
+        raise NotImplementedError(
+            f"Multimodal (image) inputs are not supported for provider '{cfg['provider']}' in this sprint."
+        )
 
     try:
         text = await _dispatch(cfg, msgs, sys_content, stream=False)
@@ -282,7 +292,7 @@ async def call_llm(
             return f"Local model error: {e}", {**cfg, "error": str(e)}
         # Fall back to ollama for paid providers on any error.
         logger.warning("LLM provider %s failed (%s) — falling back to Ollama", cfg["provider"], e)
-        fb_cfg = {"provider": PROVIDER_OLLAMA, "model": DEFAULT_MODELS[PROVIDER_OLLAMA],
+        fb_cfg = {"provider": PROVIDER_OLLAMA, "model": model or DEFAULT_MODELS[PROVIDER_OLLAMA],
                   "api_key": "", "fellback": True, "reason": f"{cfg['provider']} error: {e}"}
         try:
             text = await _dispatch(fb_cfg, msgs, sys_content, stream=False)
@@ -301,14 +311,24 @@ async def stream_llm(
     user_id: Optional[str] = None,
     context: str = "",
     system_prompt: str = "",
+    model: Optional[str] = None,
 ) -> AsyncIterator[Tuple[dict, dict]]:
     """Streaming call. Yields (payload_dict, meta) tuples. The first yielded meta
     indicates which provider is actually answering (post-fallback). The
     payload_dict is standardized to: {"text": "...", "done": bool}.
     """
     cfg = get_user_llm_config(user_id)
+    if model:
+        cfg["model"] = model
     sys_content = _build_system_content(system_prompt, context)
     msgs = _ensure_messages(messages)
+
+    # Sprint 1.2: Check if any message contains multimodal inputs (images key)
+    has_images = any("images" in m for m in msgs)
+    if has_images and cfg["provider"] != PROVIDER_OLLAMA:
+        raise NotImplementedError(
+            f"Multimodal (image) inputs are not supported for provider '{cfg['provider']}' in this sprint."
+        )
 
     try:
         gen = await _dispatch(cfg, msgs, sys_content, stream=True)

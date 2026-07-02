@@ -56,7 +56,10 @@ let package = Package(
                 "BackendManager.swift",
                 "MockDataProvider.swift",
                 "QueryService.swift",
-                "AuthView.swift"
+                "AuthView.swift",
+                "GhostCursor/GhostCursorOverlayWindow.swift",
+                "GhostCursor/GhostCursorRingView.swift",
+                "GhostCursor/GhostCursorTestHarness.swift"
             ],
             resources: [
                 .process("Resources")

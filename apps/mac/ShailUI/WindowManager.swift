@@ -10,6 +10,12 @@ class WindowManager: ObservableObject {
     @Published var isVisible: Bool = false
     @Published private(set) var isLauncherMode: Bool = true
     
+    // Ghost Cursor overlay management
+    let ghostCursorController = GhostCursorOverlayController()
+    lazy var ghostCursorTestHarness: GhostCursorTestHarness = {
+        GhostCursorTestHarness(controller: ghostCursorController)
+    }()
+    
     /// Creates and configures the floating panel
     func createPanel(coordinator: ViewCoordinator, startInLauncher: Bool = true) {
         self.coordinator = coordinator

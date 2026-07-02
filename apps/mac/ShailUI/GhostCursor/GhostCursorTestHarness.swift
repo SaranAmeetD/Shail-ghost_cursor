@@ -6,10 +6,12 @@ import SwiftUI
 /// without requiring the Python execution engine.
 class GhostCursorTestHarness {
     private let controller: GhostCursorOverlayController
+    private let planApprovalController: PlanApprovalController
     private var isTesting = false
     
-    init(controller: GhostCursorOverlayController) {
+    init(controller: GhostCursorOverlayController, planApprovalController: PlanApprovalController) {
         self.controller = controller
+        self.planApprovalController = planApprovalController
     }
     
     func runTestSequence() {
@@ -46,6 +48,38 @@ class GhostCursorTestHarness {
                         }
                     }
                 }
+                }
+            }
+        }
+    }
+    
+    func runPlanApprovalTest() {
+        let mockPlan = GuidancePlan(
+            schemaVersion: "1",
+            steps: [
+                GuidancePlanStep(
+                    action: .click,
+                    targetSelector: "button.submit",
+                    fallbackCoords: [800, 400],
+                    expectedOutcome: "Submit form"
+                ),
+                GuidancePlanStep(
+                    action: .type,
+                    targetSelector: "input.email",
+                    fallbackCoords: [200, 150],
+                    expectedOutcome: "Enter email"
+                )
+            ]
+        )
+        
+        planApprovalController.present(plan: mockPlan) { intent in
+            switch intent {
+            case .approve(let approvedPlan):
+                print("Plan approved: \(approvedPlan.steps.count) steps")
+                // Start execution here
+                self.runTestSequence()
+            case .cancel:
+                print("Plan cancelled")
             }
         }
     }

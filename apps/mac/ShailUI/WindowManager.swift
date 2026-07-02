@@ -12,8 +12,12 @@ class WindowManager: ObservableObject {
     
     // Ghost Cursor overlay management
     let ghostCursorController = GhostCursorOverlayController()
+    let planApprovalController = PlanApprovalController()
     lazy var ghostCursorTestHarness: GhostCursorTestHarness = {
-        GhostCursorTestHarness(controller: ghostCursorController)
+        GhostCursorTestHarness(
+            controller: ghostCursorController,
+            planApprovalController: planApprovalController
+        )
     }()
     
     /// Creates and configures the floating panel

@@ -59,10 +59,21 @@ let package = Package(
                 "AuthView.swift",
                 "GhostCursor/GhostCursorOverlayWindow.swift",
                 "GhostCursor/GhostCursorRingView.swift",
-                "GhostCursor/GhostCursorTestHarness.swift"
+                "GhostCursor/GhostCursorTestHarness.swift",
+                "GhostCursor/PlanApproval/GuidancePlanModel.swift",
+                "GhostCursor/PlanApproval/PlanApprovalView.swift",
+                "GhostCursor/PlanApproval/PlanApprovalPanel.swift"
             ],
             resources: [
                 .process("Resources")
+            ]
+        ),
+        .testTarget(
+            name: "ShailUITests",
+            dependencies: ["ShailUI"],
+            path: "Tests",
+            sources: [
+                "PlanApprovalTests.swift"
             ]
         )
     ]

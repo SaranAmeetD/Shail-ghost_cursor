@@ -188,6 +188,205 @@ class AXController {
         return info
     }
     
+    // MARK: - Sprint 1.3: Window Element Tree
+    
+    /// Supported AX roles for the Sprint 1.3 element budget.
+    private static let allowedRoles: Set<String> = [
+        "AXButton", "AXTextField", "AXTextArea", "AXLink", "AXCheckBox",
+        "AXRadioButton", "AXComboBox", "AXPopUpButton", "AXMenuItem",
+        "AXMenuBar", "AXTabGroup", "AXTab", "AXStaticText",
+        "AXSearchField", "AXToolbar"
+    ]
+    
+    /// Interactive roles (higher priority in budget selection).
+    private static let interactiveRoles: Set<String> = [
+        "AXButton", "AXTextField", "AXTextArea", "AXLink", "AXCheckBox",
+        "AXRadioButton", "AXComboBox", "AXPopUpButton", "AXMenuItem",
+        "AXSearchField"
+    ]
+    
+    /// Returns up to `deliverLimit` filtered, priority-sorted elements from the
+    /// frontmost application's main window using iterative BFS.
+    ///
+    /// - Parameters:
+    ///   - maxDepth:     Maximum BFS depth from the window root (default: 8).
+    ///   - maxNodes:     Maximum nodes visited before stopping traversal (default: 150).
+    ///   - deliverLimit: Maximum nodes delivered to the caller after filtering (default: 40).
+    /// - Returns: Array of element info dictionaries using the canonical ScreenRect format.
+    static func getWindowElements(
+        maxDepth: Int = 8,
+        maxNodes: Int = 150,
+        deliverLimit: Int = 40
+    ) -> [[String: Any]] {
+        
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else {
+            return []
+        }
+        
+        let pid = frontApp.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+        
+        // Obtain main window
+        var windowListRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            appElement, kAXWindowsAttribute as CFString, &windowListRef
+        ) == .success,
+              let windows = windowListRef as? [AXUIElement],
+              !windows.isEmpty else {
+            return []
+        }
+        let rootWindow = windows[0]
+        
+        // Determine screen centre for proximity scoring
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1440, height: 900)
+        let screenCX = screenSize.width / 2
+        let screenCY = screenSize.height / 2
+        
+        // Identify the currently focused element for priority boosting
+        var focusedRef: CFTypeRef?
+        let systemWide = AXUIElementCreateSystemWide()
+        let focusedElement: AXUIElement? = {
+            guard AXUIElementCopyAttributeValue(
+                systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef
+            ) == .success, let ref = focusedRef else { return nil }
+            return unsafeBitCast(ref, to: AXUIElement.self)
+        }()
+        
+        // BFS state — plain tuples avoid local-struct visibility issues with helpers
+        var queue: [(element: AXUIElement, depth: Int)] = [(element: rootWindow, depth: 0)]
+        var visited = Set<String>()       // CFHash-based visit IDs assigned at traversal time
+        var collected: [[String: Any]] = []
+        var nodesVisited = 0
+        
+        while !queue.isEmpty && nodesVisited < maxNodes {
+            let entry = queue.removeFirst()
+            let element = entry.element
+            let depth = entry.depth
+            nodesVisited += 1
+            
+            // Assign a stable visit ID using object pointer as proxy
+            // (AXUIElement has no built-in UUID; pointer is stable for this traversal)
+            let elementPtr = String(UInt(bitPattern: CFHash(element)))
+            guard !visited.contains(elementPtr) else { continue }
+            visited.insert(elementPtr)
+            
+            // --- Filtering ---
+            // Role filter
+            let role = getAttributeValue(element, kAXRoleAttribute as CFString) as? String ?? ""
+            guard allowedRoles.contains(role) else {
+                // Still enqueue children if within depth limit
+                if depth < maxDepth {
+                    enqueueChildren(of: element, depth: depth, queue: &queue)
+                }
+                continue
+            }
+            
+            // Hidden filter
+            if let hidden = getAttributeValue(element, kAXHiddenAttribute as CFString) as? Bool, hidden {
+                continue
+            }
+            
+            // Enabled filter
+            if let enabled = getAttributeValue(element, kAXEnabledAttribute as CFString) as? Bool, !enabled {
+                continue
+            }
+            
+            // Label filter: at least one of title/value/description must be non-empty
+            let title = getAttributeValue(element, kAXTitleAttribute as CFString) as? String ?? ""
+            let description = getAttributeValue(element, kAXDescriptionAttribute as CFString) as? String ?? ""
+            let value: String = {
+                if let v = getAttributeValue(element, kAXValueAttribute as CFString) as? String { return v }
+                return ""
+            }()
+            guard !title.isEmpty || !description.isEmpty || !value.isEmpty else {
+                if depth < maxDepth { enqueueChildren(of: element, depth: depth, queue: &queue) }
+                continue
+            }
+            
+            // Size filter: skip invisible elements
+            var elemX = 0, elemY = 0, elemW = 0, elemH = 0
+            if let posRef = getAttributeValue(element, kAXPositionAttribute as CFString) {
+                let pos = unsafeBitCast(posRef, to: AXValue.self)
+                var pt = CGPoint.zero
+                if AXValueGetValue(pos, .cgPoint, &pt) {
+                    elemX = Int(pt.x); elemY = Int(pt.y)
+                }
+            }
+            if let szRef = getAttributeValue(element, kAXSizeAttribute as CFString) {
+                let sz = unsafeBitCast(szRef, to: AXValue.self)
+                var cgsz = CGSize.zero
+                if AXValueGetValue(sz, .cgSize, &cgsz) {
+                    elemW = Int(cgsz.width); elemH = Int(cgsz.height)
+                }
+            }
+            guard elemW > 0 && elemH > 0 else {
+                if depth < maxDepth { enqueueChildren(of: element, depth: depth, queue: &queue) }
+                continue
+            }
+            
+            // Priority scoring (lower score = higher priority)
+            var priorityScore = 0
+            // 1. Focused element gets score 0 (highest)
+            if let focused = focusedElement, CFEqual(element, focused) {
+                priorityScore = 0
+            } else {
+                // 2. Interactive > static
+                priorityScore = interactiveRoles.contains(role) ? 10 : 50
+                // 3. Proximity to screen centre (Euclidean distance, scaled)
+                let cx = Double(elemX + elemW / 2)
+                let cy = Double(elemY + elemH / 2)
+                let dist = sqrt(pow(cx - Double(screenCX), 2) + pow(cy - Double(screenCY), 2))
+                priorityScore += Int(dist / 100)
+            }
+            
+            var info: [String: Any] = [
+                "element_id":   elementPtr,
+                "role":         role,
+                "title":        String(title.prefix(120)),
+                "value":        String(value.prefix(120)),
+                "description":  String(description.prefix(120)),
+                "x":            elemX,
+                "y":            elemY,
+                "width":        elemW,
+                "height":       elemH,
+                "_priority":    priorityScore   // stripped before response
+            ]
+            collected.append(info)
+            
+            // Enqueue children
+            if depth < maxDepth {
+                enqueueChildren(of: element, depth: depth, queue: &queue)
+            }
+        }
+        
+        // Sort by priority score, deliver top `deliverLimit`
+        collected.sort { ($0["_priority"] as? Int ?? 999) < ($1["_priority"] as? Int ?? 999) }
+        let delivered = Array(collected.prefix(deliverLimit))
+        
+        // Strip internal priority key before returning
+        return delivered.map { elem in
+            var e = elem
+            e.removeValue(forKey: "_priority")
+            return e
+        }
+    }
+    
+    /// Enqueues direct AX children of `element` into the BFS queue at `depth + 1`.
+    private static func enqueueChildren(
+        of element: AXUIElement,
+        depth: Int,
+        queue: inout [(element: AXUIElement, depth: Int)]
+    ) {
+        var childrenRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element, kAXChildrenAttribute as CFString, &childrenRef
+        ) == .success,
+              let children = childrenRef as? [AXUIElement] else { return }
+        for child in children {
+            queue.append((element: child, depth: depth + 1))
+        }
+    }
+    
     // MARK: - Helper Methods
     
     private static func getAttributeValue(_ element: AXUIElement, _ attribute: CFString) -> CFTypeRef? {

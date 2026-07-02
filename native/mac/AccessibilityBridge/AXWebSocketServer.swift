@@ -169,6 +169,30 @@ actor AXWebSocketServer {
                 response["error"] = "Missing x or y coordinates"
             }
             
+        case "get_window_elements":
+            // Sprint 1.3: Bounded BFS traversal of active window element tree
+            let windowInfo = AXController.getActiveWindowInfo()
+            let elements = AXController.getWindowElements(maxDepth: 8, maxNodes: 150, deliverLimit: 40)
+            
+            let application: [String: Any] = [
+                "name":      windowInfo["app_name"] as? String ?? "",
+                "bundle_id": windowInfo["bundle_id"] as? String ?? "",
+                "pid":       windowInfo["pid"] as? Int ?? 0
+            ]
+            let activeWindow: [String: Any] = [
+                "title":  windowInfo["window_title"] as? String ?? "",
+                "x":      windowInfo["window_x"] as? Int ?? 0,
+                "y":      windowInfo["window_y"] as? Int ?? 0,
+                "width":  windowInfo["window_width"] as? Int ?? 0,
+                "height": windowInfo["window_height"] as? Int ?? 0
+            ]
+            response["success"]       = true
+            response["timestamp"]     = ISO8601DateFormatter().string(from: Date())
+            response["application"]   = application
+            response["active_window"] = activeWindow
+            response["element_count"] = elements.count
+            response["elements"]      = elements
+            
         default:
             response["error"] = "Unknown command: \(command)"
         }

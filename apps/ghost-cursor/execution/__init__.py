@@ -1,0 +1,3 @@
+"""
+Ghost Cursor execution package.
+"""

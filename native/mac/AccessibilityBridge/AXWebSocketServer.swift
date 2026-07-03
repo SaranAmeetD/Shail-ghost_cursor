@@ -151,6 +151,21 @@ actor AXWebSocketServer {
                 response["error"] = "Missing key parameter"
             }
             
+        case "scroll":
+            if let x = json["x"] as? Int,
+               let y = json["y"] as? Int,
+               let deltaX = json["delta_x"] as? Int,
+               let deltaY = json["delta_y"] as? Int {
+                let success = AXController.scroll(x: x, y: y, deltaX: deltaX, deltaY: deltaY)
+                response["success"] = success
+                response["x"] = x
+                response["y"] = y
+                response["delta_x"] = deltaX
+                response["delta_y"] = deltaY
+            } else {
+                response["error"] = "Missing x, y, delta_x, or delta_y parameters"
+            }
+            
         case "get_active_window":
             let info = AXController.getActiveWindowInfo()
             response["success"] = true

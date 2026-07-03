@@ -27,6 +27,25 @@ class AXController {
         return true
     }
     
+    /// Scroll at specified coordinates using CGEvent
+    static func scroll(x: Int, y: Int, deltaX: Int, deltaY: Int) -> Bool {
+        let point = CGPoint(x: CGFloat(x), y: CGFloat(y))
+        
+        // Move mouse to coordinate first
+        guard let mouseMove = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else {
+            return false
+        }
+        mouseMove.post(tap: .cghidEventTap)
+        
+        // Post scroll event
+        guard let scrollEvent = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: Int32(deltaY), wheel2: Int32(deltaX), wheel3: 0) else {
+            return false
+        }
+        scrollEvent.post(tap: .cghidEventTap)
+        
+        return true
+    }
+    
     /// Type text using CGEvent
     static func typeText(_ text: String) -> Bool {
         // Create keyboard events for each character

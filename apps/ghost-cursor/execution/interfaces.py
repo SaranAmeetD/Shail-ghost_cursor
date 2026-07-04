@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict, Any, Optional
 
 class CursorDriver(ABC):
     """
@@ -37,4 +38,16 @@ class OverlayRenderer(ABC):
 
     @abstractmethod
     def flash(self) -> bool:
+        pass
+
+class VerifiableCursorDriver(CursorDriver):
+    """
+    Interface for cursor drivers that can be inspected for validation.
+    """
+    @abstractmethod
+    def get_element_at(self, x: int, y: int) -> Optional[Dict[str, Any]]:
+        """
+        Returns AX element info dict at (x, y), or None if no element found.
+        Used exclusively by ResultObserver for post-action verification.
+        """
         pass

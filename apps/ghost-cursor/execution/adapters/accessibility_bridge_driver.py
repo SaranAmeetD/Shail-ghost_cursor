@@ -15,11 +15,11 @@ except ImportError:
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from execution.interfaces import CursorDriver
+from execution.interfaces import VerifiableCursorDriver
 
 logger = logging.getLogger(__name__)
 
-class AccessibilityBridgeDriver(CursorDriver):
+class AccessibilityBridgeDriver(VerifiableCursorDriver):
     """
     CursorDriver implementation that communicates with the native 
     macOS AccessibilityBridge WebSocket server at ws://localhost:8766.
@@ -44,6 +44,17 @@ class AccessibilityBridgeDriver(CursorDriver):
         except Exception as e:
             logger.error(f"Failed to connect to AccessibilityBridge: {e}")
             return False
+
+    async def _send_command_raw(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Helper to send a command and return the raw JSON response."""
+        try:
+            async with websockets.connect(self.uri) as websocket:
+                await websocket.send(json.dumps(payload))
+                response_str = await websocket.recv()
+                return json.loads(response_str)
+        except Exception as e:
+            logger.error(f"Failed to connect to AccessibilityBridge: {e}")
+            return None
 
     def click(self, x: int, y: int) -> bool:
         payload = {
@@ -82,3 +93,14 @@ class AccessibilityBridgeDriver(CursorDriver):
         # Concrete implementation deferred.
         logger.info(f"navigate() called with url={url} - implementation deferred.")
         return True
+
+    def get_element_at(self, x: int, y: int) -> Optional[Dict[str, Any]]:
+        payload = {
+            "command": "get_element_at",
+            "x": int(x),
+            "y": int(y)
+        }
+        response = asyncio.run(self._send_command_raw(payload))
+        if response and response.get("success"):
+            return response.get("element")
+        return None

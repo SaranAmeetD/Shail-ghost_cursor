@@ -23,7 +23,7 @@ class ExecutionLoop:
         observer: Optional[ResultObserver] = None,
         telemetry: Optional[TelemetryLogger] = None,
         privacy_guard: Optional[PrivacyGuard] = None,
-        on_step_failure: Optional[Callable[[GuidancePlanStep, int], None]] = None,
+        on_step_failure: Optional[Callable[[GuidancePlanStep, int, str], None]] = None,
         on_privacy_block: Optional[Callable[[str], None]] = None,
         retry_delay_s: float = 0.5
     ):
@@ -111,7 +111,14 @@ class ExecutionLoop:
                 if not verified:
                     logger.warning(f"Step {index + 1} verification failed after retry: {result.reason}")
                     if self.on_step_failure:
-                        self.on_step_failure(step, index)
+                        from validation.failure_diagnostics import FailureDiagnostics
+                        if self.telemetry:
+                            recent_events = self.telemetry.get_recent_events(limit=3)
+                            enriched_context = FailureDiagnostics.format_failure_context(step, recent_events)
+                            logger.info(f"Enriched failure context:\n{enriched_context}")
+                            self.on_step_failure(step, index, enriched_context)
+                        else:
+                            self.on_step_failure(step, index, "No telemetry available.")
             elif not success:
                 logger.warning(f"Step {index + 1} ({step.action}) reported failure from driver.")
             

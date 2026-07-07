@@ -63,16 +63,17 @@ def test_telemetry_writes_when_active(temp_log_file, dummy_plan):
             
             step_result = json.loads(lines[1])
             assert step_result["event"] == "step_result"
-            assert step_result["action"] == "click"
-            assert step_result["success"] is True
-            assert step_result["verified"] is True
-            assert step_result["latency_ms"] == 150.5
+            props = step_result["properties"]
+            assert props["action"] == "click"
+            assert props["success"] is True
+            assert props["verified"] is True
+            assert props["latency_ms"] == 150.5
             # Ensure no forbidden keys
-            assert "image" not in step_result
-            assert "ocr" not in step_result
-            assert "base64" not in step_result
-            assert "text" not in step_result
-            assert "selector" not in step_result
+            assert "image" not in props
+            assert "ocr" not in props
+            assert "base64" not in props
+            assert "text" not in props
+            assert "selector" not in props
 
 def test_telemetry_purge_stale_logs(temp_log_file):
     with mock.patch("os.environ.get", return_value="1"):

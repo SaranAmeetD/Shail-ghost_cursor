@@ -122,3 +122,11 @@ class ClickyTelemetryLogger(TelemetryLogger):
         if self._current_session_id is not None:
             end_session(self._current_session_id, "aborted", self._current_session_events)
             self._current_session_id = None
+
+    def get_recent_events(self, limit: int = 3) -> list:
+        import copy
+        if not self._current_session_events:
+            return []
+        # Return a defensive copy of the last `limit` events
+        return copy.deepcopy(self._current_session_events[-limit:])
+

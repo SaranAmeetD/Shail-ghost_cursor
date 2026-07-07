@@ -23,3 +23,10 @@ class TelemetryLogger(ABC):
     @abstractmethod
     def log_plan_aborted(self, reason: str) -> None:
         pass
+
+    @abstractmethod
+    def get_recent_events(self, limit: int = 3) -> list:
+        """
+        Returns a defensive copy of up to `limit` recent telemetry events from the current session.
+        """
+        pass

@@ -51,6 +51,15 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
         if not self.is_active:
             return
         event_data["timestamp"] = time.time()
+        
+        if not hasattr(self, "_recent_events"):
+            self._recent_events = []
+        
+        # Keep track of recent events in memory for get_recent_events
+        self._recent_events.append(event_data)
+        if len(self._recent_events) > 10:
+            self._recent_events.pop(0)
+
         try:
             with open(self.log_file, "a") as f:
                 f.write(json.dumps(event_data) + "\n")
@@ -58,6 +67,7 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
             logger.warning(f"Failed to write telemetry log: {e}")
 
     def log_plan_start(self, plan: GuidancePlan) -> None:
+        self._recent_events = []
         self._write_log({
             "event": "plan_start",
             "step_count": len(plan.steps)
@@ -66,11 +76,13 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
     def log_step_result(self, step: GuidancePlanStep, index: int, success: bool, verified: bool, latency_ms: float) -> None:
         self._write_log({
             "event": "step_result",
-            "step_index": index,
-            "action": step.action,
-            "success": success,
-            "verified": verified,
-            "latency_ms": latency_ms
+            "properties": {
+                "step_index": index,
+                "action": step.action,
+                "success": success,
+                "verified": verified,
+                "latency_ms": latency_ms
+            }
         })
 
     def log_plan_complete(self, success: bool, total_ms: float) -> None:
@@ -85,3 +97,10 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
             "event": "plan_aborted",
             "reason": reason
         })
+
+    def get_recent_events(self, limit: int = 3) -> list:
+        import copy
+        if not hasattr(self, "_recent_events") or not self._recent_events:
+            return []
+        return copy.deepcopy(self._recent_events[-limit:])
+

@@ -55,3 +55,57 @@ def end_session(session_id: str, status: str, clicky_log: List[Dict[str, Any]]) 
             "UPDATE ghost_sessions SET status = ?, clicky_log = ? WHERE session_id = ?",
             (status, log_json, session_id)
         )
+
+import sqlite3
+
+def get_sessions() -> List[Dict[str, Any]]:
+    """Returns all ghost sessions sorted by newest first."""
+    with apps.shail.db.get_db() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT session_id, created_at, intent_text, total_steps, completed_steps, status FROM ghost_sessions ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+def get_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Returns a specific session by ID, including its Clicky event log."""
+    with apps.shail.db.get_db() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT session_id, created_at, intent_text, total_steps, completed_steps, status, clicky_log FROM ghost_sessions WHERE session_id = ?",
+            (session_id,)
+        ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        data['clicky_log'] = json.loads(data['clicky_log']) if data['clicky_log'] else []
+        return data
+
+def delete_session(session_id: str) -> bool:
+    """Deletes a session by ID. Returns True if deleted, False if not found."""
+    with apps.shail.db.get_db() as conn:
+        cursor = conn.execute(
+            "DELETE FROM ghost_sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        return cursor.rowcount > 0
+
+def bulk_delete_sessions(start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+    """Deletes sessions within an optional date range based on created_at."""
+    query = "DELETE FROM ghost_sessions"
+    conditions = []
+    params = []
+    
+    if start_date:
+        conditions.append("created_at >= ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("created_at <= ?")
+        params.append(end_date)
+        
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+        
+    with apps.shail.db.get_db() as conn:
+        cursor = conn.execute(query, tuple(params))
+        return cursor.rowcount

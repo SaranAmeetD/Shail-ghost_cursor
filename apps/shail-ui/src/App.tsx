@@ -20,6 +20,7 @@ import { ExportImport } from './pages/ExportImport';
 import { Graphify } from './pages/Graphify';
 import { LocalFiles } from './pages/LocalFiles';
 import { AuthGate } from './pages/AuthGate';
+import { GhostCursor } from './pages/GhostCursor';
 import { AnonymousSyncModal } from './components/AnonymousSyncModal';
 import { getApiKey } from './auth';
 import { api } from './api';
@@ -142,6 +143,7 @@ export function App() {
             <Route path="/export"      element={<ExportImport />} />
             <Route path="/graphify"    element={<Graphify />} />
             <Route path="/files"       element={<LocalFiles />} />
+            <Route path="/ghost-cursor" element={<GhostCursor />} />
           </Routes>
         </main>
         {flag('ui_v2') && <EvidenceRail />}

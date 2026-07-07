@@ -335,6 +335,16 @@ app.include_router(dashboard_router, prefix="/api/v2", tags=["dashboard"])
 app.include_router(memory_router, prefix="/memory", tags=["memory"])
 app.include_router(path_idx_router, prefix="/path-index", tags=["path-index"])
 
+import importlib.util
+import os
+ghost_cursor_api_path = os.path.join(PROJECT_ROOT, "apps", "ghost-cursor", "api", "routes.py")
+if os.path.exists(ghost_cursor_api_path):
+    spec = importlib.util.spec_from_file_location("ghost_cursor_api", ghost_cursor_api_path)
+    if spec and spec.loader:
+        gc_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gc_module)
+        app.include_router(gc_module.router, prefix="/ghost", tags=["ghost-cursor"])
+
 from apps.shail.system_api import system_router  # noqa: E402
 app.include_router(system_router, prefix="/system", tags=["system"])
 

@@ -318,7 +318,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids: ids ?? null }),
     }),
+
+  // Ghost Cursor
+  getGhostSessions: () => req<GhostSession[]>('/ghost/sessions'),
+  getGhostSession: (id: string) => req<GhostSessionDetail>(`/ghost/sessions/${id}`),
+  deleteGhostSession: (id: string) => req<{ success: boolean }>(`/ghost/sessions/${id}`, { method: 'DELETE' }),
+  bulkDeleteGhostSessions: (start_date?: string, end_date?: string) => {
+    const params = new URLSearchParams();
+    if (start_date) params.set('start_date', start_date);
+    if (end_date) params.set('end_date', end_date);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return req<{ deleted_count: number }>(`/ghost/sessions/bulk${qs}`, { method: 'DELETE' });
+  },
 };
+
+export interface GhostSession {
+  session_id: string;
+  created_at: string;
+  intent_text: string | null;
+  total_steps: number;
+  completed_steps: number;
+  status: string;
+}
+
+export interface GhostSessionDetail extends GhostSession {
+  clicky_log: any[];
+}
 
 // ── Ascents types ──────────────────────────────────────────────────────────
 export interface TodoItem {

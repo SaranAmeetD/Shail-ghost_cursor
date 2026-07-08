@@ -5,5 +5,7 @@
 # does not mutate sys.path; combined with the explicit `pythonpath`, the
 # top-level package wins deterministically.
 addopts = "--import-mode=importlib"
+asyncio_mode = "strict"
+asyncio_default_test_loop_scope = "session"
 pythonpath = ["."]
 testpaths = ["apps/shail/tests"]

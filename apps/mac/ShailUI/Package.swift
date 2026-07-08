@@ -71,10 +71,7 @@ let package = Package(
         .testTarget(
             name: "ShailUITests",
             dependencies: ["ShailUI"],
-            path: "Tests",
-            sources: [
-                "PlanApprovalTests.swift"
-            ]
+            path: "Tests"
         )
     ]
 )

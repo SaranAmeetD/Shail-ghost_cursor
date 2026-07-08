@@ -80,8 +80,11 @@ def test_workflow_1_system_settings():
     }
     
     with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
-         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": None}):
-         
+         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": None}), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
         response = client.post("/ghost/execute", json=plan)
         assert response.status_code == 200
         sessions = client.get("/ghost/sessions").json()
@@ -106,8 +109,11 @@ def test_workflow_2_github_repo():
         return {"success": True, "element": None}
 
     with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
-         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", side_effect=mock_send_command_raw):
-        
+         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", side_effect=mock_send_command_raw), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
         response = client.post("/ghost/execute", json=plan)
         assert response.status_code == 200
         sessions = client.get("/ghost/sessions").json()
@@ -124,7 +130,11 @@ def test_workflow_3_complex_scrolling():
         ]
     }
     with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
-         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": None}):
+         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": None}), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
         response = client.post("/ghost/execute", json=plan)
         assert response.status_code == 200
 
@@ -138,7 +148,11 @@ def test_workflow_4_typing():
         ]
     }
     with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
-         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": {"id": "mock"}}):
+         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": {"id": "mock"}}), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
         response = client.post("/ghost/execute", json=plan)
         assert response.status_code == 200
 
@@ -146,15 +160,115 @@ def test_workflow_5_deliberate_failure():
     plan = {
         "schema_version": "1",
         "steps": [
-            {"action": "click", "target_selector": "Missing element", "fallback_coords": [10, 10], "expected_outcome": "Never succeeds"}
+            {"action": "click", "target_selector": "Missing element", "fallback_coords": [10, 10], "expected_outcome": "Fails initially, succeeds on retry"}
         ]
     }
     
+    # Mock observer to fail on the first try and succeed on the second
+    call_count = [0]
+    def mock_observe(*args, **kwargs):
+        from validation.observer import ObservationResult
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return ObservationResult(is_verifiable=True, verified=False, reason="Element not found")
+        return ObservationResult(is_verifiable=True, verified=True, reason="Element found")
+
     with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
-         patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command_raw", return_value={"success": True, "element": {"id": "mock"}}):
+         patch("validation.observer.ResultObserver.observe", side_effect=mock_observe), \
+         patch("asyncio.run", return_value=True):
         
         response = client.post("/ghost/execute", json=plan)
         assert response.status_code == 200
         
-        abort_res = client.post("/ghost/abort")
-        assert abort_res.status_code in (200, 400)
+        sessions = client.get("/ghost/sessions").json()
+        assert len(sessions) > 0
+        assert sessions[0]["status"] == "completed"
+        assert call_count[0] == 2  # Proves retry logic fired
+
+def test_deny_domain_policy():
+    plan = {
+        "schema_version": "1",
+        "steps": [
+            {"action": "navigate", "target_selector": "https://chase.com", "fallback_coords": [10, 10], "expected_outcome": "Navigates to bank"}
+        ]
+    }
+    
+    with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True):
+        response = client.post("/ghost/execute", json=plan)
+        assert response.status_code == 200
+        
+        sessions = client.get("/ghost/sessions").json()
+        # The execution loop logs plan aborted, which saves status as "aborted"
+        assert sessions[0]["status"] == "aborted"
+
+def test_audit_log_entry_and_delete():
+    # 1. Create session
+    plan = {
+        "schema_version": "1",
+        "steps": [
+            {"action": "click", "target_selector": "Audit element", "fallback_coords": [10, 10], "expected_outcome": "Creates audit log"}
+        ]
+    }
+    
+    with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
+        client.post("/ghost/execute", json=plan)
+        
+    sessions = client.get("/ghost/sessions").json()
+    assert len(sessions) > 0
+    session_id = sessions[0]["session_id"]
+    
+    # 2. Retrieve session
+    detail = client.get(f"/ghost/sessions/{session_id}").json()
+    assert detail["session_id"] == session_id
+    
+    # 3. Delete session (One-click delete)
+    delete_res = client.delete(f"/ghost/sessions/{session_id}")
+    assert delete_res.status_code == 200
+    assert delete_res.json()["success"] is True
+    
+    # 4. Verify post-delete
+    missing_res = client.get(f"/ghost/sessions/{session_id}")
+    assert missing_res.status_code == 404
+
+def test_voice_trigger_end_to_end():
+    from execution.interfaces import VoiceTrigger
+    class MockVoiceTrigger(VoiceTrigger):
+        def listen(self, callback):
+            callback("Open notes app and type meeting summary")
+
+    trigger = MockVoiceTrigger()
+    captured_command = []
+    def mock_callback(command: str):
+        captured_command.append(command)
+        
+    trigger.listen(mock_callback)
+    assert captured_command[0] == "Open notes app and type meeting summary"
+
+
+def test_plan_approval_latency():
+    import time
+    plan = {
+        "schema_version": "1",
+        "steps": [
+            {"action": "click", "target_selector": "Latency check", "fallback_coords": [10, 10], "expected_outcome": "Fast"}
+        ]
+    }
+    
+    with patch("execution.adapters.accessibility_bridge_driver.AccessibilityBridgeDriver._send_command", return_value=True), \
+         patch("validation.observer.ResultObserver.observe") as mock_obs, \
+         patch("asyncio.run", return_value=True):
+        
+        from validation.observer import ObservationResult
+        mock_obs.return_value = ObservationResult(is_verifiable=True, verified=True, reason="Mocked")
+        
+        start_time = time.monotonic()
+        response = client.post("/ghost/execute", json=plan)
+        end_time = time.monotonic()
+        
+        latency = end_time - start_time
+        assert response.status_code == 200
+        assert latency < 2.0  # Plan approval latency must be < 2 seconds

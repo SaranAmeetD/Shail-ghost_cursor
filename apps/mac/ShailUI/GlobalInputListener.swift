@@ -40,10 +40,10 @@ class GlobalInputListener: ObservableObject {
 
     // MARK: - Hotkey definition: ⌘ + Shift + S
 
-    private func isShailHotkey(_ event: NSEvent) -> Bool {
+    func isShailHotkey(_ event: NSEvent) -> Bool {
         let required: NSEvent.ModifierFlags = [.command, .shift]
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // keyCode 1 = S key
-        return modifiers == required && event.keyCode == 1
+        // keyCode 5 = G key (Ghost Cursor)
+        return modifiers == required && event.keyCode == 5
     }
 }

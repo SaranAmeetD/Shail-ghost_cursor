@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 
 class CursorDriver(ABC):
     """
@@ -50,4 +50,12 @@ class VerifiableCursorDriver(CursorDriver):
         Returns AX element info dict at (x, y), or None if no element found.
         Used exclusively by ResultObserver for post-action verification.
         """
+        pass
+
+class VoiceTrigger(ABC):
+    """
+    Abstract interface for triggering workflows via voice commands.
+    """
+    @abstractmethod
+    def listen(self, callback: Callable[[str], None]) -> None:
         pass

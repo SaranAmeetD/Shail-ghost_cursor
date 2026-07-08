@@ -89,17 +89,22 @@ async def test_capture_screen_base64_success():
     """
     pipeline = VSLMPipeline()
     
-    mock_ws = AsyncMock()
-    # Mock return value of ws.recv() to simulate success
+    mock_ws = MagicMock()
     mock_response = {
         "type": "png_response",
         "request_id": "vslm-capture-sprint1.2",
         "status": "ok",
         "data_b64": DUMMY_BASE64_PNG
     }
-    mock_ws.recv.return_value = json.dumps(mock_response)
+    mock_ws.recv = AsyncMock(return_value=json.dumps(mock_response))
+    mock_ws.send = AsyncMock()
     
-    with patch("websockets.connect", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_ws))):
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def _mock_connect(*args, **kwargs):
+        yield mock_ws
+    
+    with patch("websockets.connect", side_effect=_mock_connect):
         img_b64 = await pipeline.capture_screen_base64()
         assert img_b64 == DUMMY_BASE64_PNG
         mock_ws.send.assert_called_once()
@@ -113,16 +118,22 @@ async def test_capture_screen_base64_failure():
     """
     pipeline = VSLMPipeline()
     
-    mock_ws = AsyncMock()
+    mock_ws = MagicMock()
     mock_response = {
         "type": "png_response",
         "request_id": "vslm-capture-sprint1.2",
         "status": "error",
         "message": "Screen capture permission missing"
     }
-    mock_ws.recv.return_value = json.dumps(mock_response)
+    mock_ws.recv = AsyncMock(return_value=json.dumps(mock_response))
+    mock_ws.send = AsyncMock()
     
-    with patch("websockets.connect", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_ws))):
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def _mock_connect(*args, **kwargs):
+        yield mock_ws
+    
+    with patch("websockets.connect", side_effect=_mock_connect):
         with pytest.raises(RuntimeError) as exc_info:
             await pipeline.capture_screen_base64()
         assert "Screen capture permission missing" in str(exc_info.value)

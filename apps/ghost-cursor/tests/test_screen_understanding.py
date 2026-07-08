@@ -82,15 +82,21 @@ def _make_ax_element(idx: int, role: str = "AXButton", title: str = "") -> dict:
     }
 
 
-def _make_ws_mock(recv_payload: str) -> AsyncMock:
-    mock_ws = AsyncMock()
-    mock_ws.recv.return_value = recv_payload
+def _make_ws_mock(recv_payload: str) -> MagicMock:
+    mock_ws = MagicMock()
+    mock_ws.recv = AsyncMock(return_value=recv_payload)
+    mock_ws.send = AsyncMock()
     return mock_ws
 
 
+from contextlib import asynccontextmanager
+
 def _make_ws_connect(recv_payload: str):
     mock_ws = _make_ws_mock(recv_payload)
-    return AsyncMock(__aenter__=AsyncMock(return_value=mock_ws), __aexit__=AsyncMock(return_value=False))
+    @asynccontextmanager
+    async def _mock_connect(*args, **kwargs):
+        yield mock_ws
+    return _mock_connect()
 
 
 # ---------------------------------------------------------------------------

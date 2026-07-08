@@ -337,13 +337,28 @@ app.include_router(path_idx_router, prefix="/path-index", tags=["path-index"])
 
 import importlib.util
 import os
+
+async def require_pro_tier(user_id: str = Depends(get_current_user)) -> str:
+    from apps.shail.auth_store import get_user_tier
+    if get_user_tier(user_id) != "pro":
+        raise HTTPException(
+            status_code=403, 
+            detail="Ghost Cursor requires a Pro-tier subscription."
+        )
+    return user_id
+
 ghost_cursor_api_path = os.path.join(PROJECT_ROOT, "apps", "ghost-cursor", "api", "routes.py")
 if os.path.exists(ghost_cursor_api_path):
     spec = importlib.util.spec_from_file_location("ghost_cursor_api", ghost_cursor_api_path)
     if spec and spec.loader:
         gc_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gc_module)
-        app.include_router(gc_module.router, prefix="/ghost", tags=["ghost-cursor"])
+        app.include_router(
+            gc_module.router, 
+            prefix="/ghost", 
+            tags=["ghost-cursor"],
+            dependencies=[Depends(require_pro_tier)]
+        )
 
 from apps.shail.system_api import system_router  # noqa: E402
 app.include_router(system_router, prefix="/system", tags=["system"])

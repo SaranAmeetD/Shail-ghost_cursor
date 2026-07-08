@@ -9,3 +9,6 @@ asyncio_mode = "strict"
 asyncio_default_test_loop_scope = "session"
 pythonpath = ["."]
 testpaths = ["apps/shail/tests"]
+filterwarnings = [
+    "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+]

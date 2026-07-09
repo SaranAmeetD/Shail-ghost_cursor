@@ -54,32 +54,65 @@ class GhostCursorTestHarness {
     }
     
     func runPlanApprovalTest() {
-        let mockPlan = GuidancePlan(
-            schemaVersion: "1",
-            steps: [
-                GuidancePlanStep(
-                    action: .click,
-                    targetSelector: "button.submit",
-                    fallbackCoords: [800, 400],
-                    expectedOutcome: "Submit form"
-                ),
-                GuidancePlanStep(
-                    action: .type,
-                    targetSelector: "input.email",
-                    fallbackCoords: [200, 150],
-                    expectedOutcome: "Enter email"
-                )
-            ]
-        )
+        guard let url = URL(string: "http://localhost:8000/ghost/plan") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let key = SettingsManager.shared.settings.apiKey
+        if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         
-        planApprovalController.present(plan: mockPlan) { intent in
-            switch intent {
-            case .approve(let approvedPlan):
-                print("Plan approved: \(approvedPlan.steps.count) steps")
-                // Start execution here
-                self.runTestSequence()
-            case .cancel:
-                print("Plan cancelled")
+        let payload: [String: Any] = ["intent": "Click the 'Submit' button"]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        
+        Task {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                    let decoder = JSONDecoder()
+                    let realPlan = try decoder.decode(GuidancePlan.self, from: data)
+                    
+                    await MainActor.run {
+                        self.planApprovalController.present(plan: realPlan) { intent in
+                            switch intent {
+                            case .approve(let approvedPlan):
+                                print("Plan approved: \(approvedPlan.steps.count) steps")
+                                // Start execution here
+                                self.executeApprovedPlan(approvedPlan)
+                            case .cancel:
+                                print("Plan cancelled")
+                            }
+                        }
+                    }
+                } else {
+                    print("Failed to fetch GuidancePlan: HTTP status \(String(describing: (response as? HTTPURLResponse)?.statusCode))")
+                }
+            } catch {
+                print("Error fetching GuidancePlan: \(error)")
+            }
+        }
+    }
+
+    private func executeApprovedPlan(_ plan: GuidancePlan) {
+        guard let url = URL(string: "http://localhost:8000/ghost/execute") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let key = SettingsManager.shared.settings.apiKey
+        if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        
+        request.httpBody = try? JSONEncoder().encode(plan)
+        
+        Task {
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                    print("Execution started on backend.")
+                } else {
+                    print("Execution failed: HTTP status \(String(describing: (response as? HTTPURLResponse)?.statusCode))")
+                }
+            } catch {
+                print("Error sending execute request: \(error)")
             }
         }
     }

@@ -46,6 +46,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         observeLauncherState()
         BackendManager.shared.startMonitoring()
 
+        hotkeyListener = GlobalInputListener()
+        hotkeyListener?.startMonitoring { [weak self] in
+            self?.windowManager?.ghostCursorTestHarness.runPlanApprovalTest()
+        }
+
         // Return to accessory (no Dock icon) after a short delay — enough time
         // for any permission dialogs to appear and be fully interactive.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

@@ -13,6 +13,7 @@ from telemetry.storage import (
 import logging
 
 from models import GuidancePlan
+from vslm_pipeline import VSLMPipeline
 from execution.loop import ExecutionLoop
 from execution.adapters.accessibility_bridge_driver import AccessibilityBridgeDriver
 from execution.interfaces import OverlayRenderer
@@ -30,6 +31,15 @@ active_loop: Optional[ExecutionLoop] = None
 class DummyOverlayRenderer(OverlayRenderer):
     def move_to(self, x: int, y: int) -> bool: return True
     def flash(self) -> bool: return True
+
+class PlanRequest(BaseModel):
+    intent: str
+
+@router.post("/plan")
+async def generate_plan(request: PlanRequest) -> Dict[str, Any]:
+    pipeline = VSLMPipeline()
+    plan, latency = await pipeline.run(intent=request.intent)
+    return plan.model_dump()
 
 @router.post("/execute")
 def execute_plan(plan: GuidancePlan, background_tasks: BackgroundTasks) -> Dict[str, Any]:

@@ -60,6 +60,7 @@ let package = Package(
                 "GhostCursor/GhostCursorOverlayWindow.swift",
                 "GhostCursor/GhostCursorRingView.swift",
                 "GhostCursor/GhostCursorTestHarness.swift",
+                "GhostCursor/ExecutionCancelListener.swift",
                 "GhostCursor/PlanApproval/GuidancePlanModel.swift",
                 "GhostCursor/PlanApproval/PlanApprovalView.swift",
                 "GhostCursor/PlanApproval/PlanApprovalPanel.swift"

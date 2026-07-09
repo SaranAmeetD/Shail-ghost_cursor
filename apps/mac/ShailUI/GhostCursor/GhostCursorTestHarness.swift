@@ -8,10 +8,14 @@ class GhostCursorTestHarness {
     private let controller: GhostCursorOverlayController
     private let planApprovalController: PlanApprovalController
     private var isTesting = false
+    private var cancelListener: ExecutionCancelListener?
     
     init(controller: GhostCursorOverlayController, planApprovalController: PlanApprovalController) {
         self.controller = controller
         self.planApprovalController = planApprovalController
+        self.cancelListener = ExecutionCancelListener { [weak self] in
+            self?.abortExecution()
+        }
     }
     
     func runTestSequence() {
@@ -108,11 +112,47 @@ class GhostCursorTestHarness {
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                     print("Execution started on backend.")
+                    await MainActor.run {
+                        self.cancelListener?.startMonitoring()
+                    }
                 } else {
                     print("Execution failed: HTTP status \(String(describing: (response as? HTTPURLResponse)?.statusCode))")
                 }
             } catch {
                 print("Error sending execute request: \(error)")
+            }
+        }
+    }
+
+    private func abortExecution() {
+        guard let url = URL(string: "http://localhost:8000/ghost/abort") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload: [String: Any] = ["session_id": "current"]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        
+        let key = SettingsManager.shared.settings.apiKey
+        if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        
+        Task {
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                    print("Execution aborted on backend.")
+                    await MainActor.run {
+                        self.cancelListener?.stopMonitoring()
+                        self.controller.hideOverlay()
+                        let alert = NSAlert()
+                        alert.messageText = "Execution Aborted"
+                        alert.informativeText = "Ghost Cursor execution was stopped by the user."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                }
+            } catch {
+                print("Error sending abort request: \(error)")
             }
         }
     }

@@ -84,6 +84,9 @@ class ClickyTelemetryLogger(TelemetryLogger):
         self._current_session_id = create_session(total_steps=step_count)
         self._current_completed_steps = 0
         self._current_session_events = []
+        
+        # Cache the perception mode for logging against each step
+        self._current_perception_mode = getattr(plan, "perception_mode", "vision")
 
         self._capture("ghost_cursor_plan_start", {
             "step_count": step_count
@@ -95,7 +98,8 @@ class ClickyTelemetryLogger(TelemetryLogger):
             "action": step.action,
             "success": success,
             "verified": verified,
-            "latency_ms": latency_ms
+            "latency_ms": latency_ms,
+            "perception_mode": getattr(self, "_current_perception_mode", "vision")
         })
 
         if success and verified:

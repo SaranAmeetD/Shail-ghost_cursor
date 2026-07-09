@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from models import GuidancePlan
 from screen_understanding import ScreenContext, ScreenElement, fetch_screen_elements
 from ocr_extractor import OCREntry, extract_text
+from perception_coordinator import PerceptionCoordinator
+from perception_source import AXTreeReader, ScreenshotCapture
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,16 @@ class VSLMPipeline:
         self._ocr_confidence_threshold: float = 0.60
         self._max_context_chars: int = 4000
 
+        # Phase R4: Integrate hybrid perception coordinator
+        self.coordinator = PerceptionCoordinator(
+            ax_reader=AXTreeReader(ax_uri=self.ax_uri, timeout=self._ax_timeout),
+            vision_reader=ScreenshotCapture(
+                capture_func=lambda: self.capture_screen_base64(timeout=self._capture_timeout),
+                ocr_timeout=self._ocr_timeout,
+                ocr_confidence_threshold=self._ocr_confidence_threshold
+            )
+        )
+
     async def capture_screen_base64(self, timeout: float = 10.0) -> str:
         """
         Connect to CaptureService WebSocket and request a single-frame base64 PNG.
@@ -125,13 +137,14 @@ class VSLMPipeline:
             content_parts.append(f"\n---\n{screen_context}\n---")
         user_content = "\n".join(content_parts)
 
-        messages = [
-            {
-                "role": "user",
-                "content": user_content,
-                "images": [image_base64]
-            }
-        ]
+        msg = {
+            "role": "user",
+            "content": user_content,
+        }
+        if image_base64:
+            msg["images"] = [image_base64]
+            
+        messages = [msg]
 
         try:
             # Deep-copy to prevent the finally-block image nullification from
@@ -297,40 +310,23 @@ class VSLMPipeline:
             "total_ms": 0.0,
         }
 
-        # 1. Screenshot
-        t0 = time.monotonic()
-        image_base64 = await self.capture_screen_base64(timeout=self._capture_timeout)
-        latency_ms["capture_ms"] = (time.monotonic() - t0) * 1000
+        # Phase R4: Delegating perception gathering to Coordinator
+        # Active window logic usually implies pid=0 for frontmost
+        perception = await self.coordinator.get_perception(0, intent)
 
-        # 2. Accessibility element tree
-        t0 = time.monotonic()
-        screen_ctx = await fetch_screen_elements(
-            ax_uri=self.ax_uri, timeout=self._ax_timeout
-        )
-        latency_ms["accessibility_ms"] = (time.monotonic() - t0) * 1000
-        if not screen_ctx.available:
-            logger.warning(
-                "AccessibilityBridge unavailable; GuidancePlan will rely on screenshot + OCR only."
-            )
-
-        # 3. OCR extraction
-        t0 = time.monotonic()
-        ocr_results = await extract_text(
-            image_base64,
-            timeout=self._ocr_timeout,
-            confidence_threshold=self._ocr_confidence_threshold,
-        )
-        latency_ms["ocr_ms"] = (time.monotonic() - t0) * 1000
-
-        # 4. Context fusion
-        t0 = time.monotonic()
-        screen_context = self._build_screen_context(screen_ctx, ocr_results)
-        latency_ms["context_build_ms"] = (time.monotonic() - t0) * 1000
+        screen_context = perception.to_text()
+        
+        image_base64 = ""
+        if perception.mode == "vision" and perception.raw_data:
+            image_base64 = perception.raw_data.get("image_base64", "")
 
         # 5. GuidancePlan generation
         t0 = time.monotonic()
         plan = await self.generate_guidance_plan(intent, image_base64, screen_context)
         latency_ms["inference_ms"] = (time.monotonic() - t0) * 1000
+
+        # Phase R5: Attach perception mode for downstream telemetry tracking
+        plan.perception_mode = perception.mode
 
         latency_ms["total_ms"] = (time.monotonic() - t_total) * 1000
         logger.info(

@@ -68,6 +68,7 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
 
     def log_plan_start(self, plan: GuidancePlan) -> None:
         self._recent_events = []
+        self._current_perception_mode = getattr(plan, "perception_mode", "vision")
         self._write_log({
             "event": "plan_start",
             "step_count": len(plan.steps)
@@ -81,7 +82,8 @@ class DevelopmentTelemetryLogger(TelemetryLogger):
                 "action": step.action,
                 "success": success,
                 "verified": verified,
-                "latency_ms": latency_ms
+                "latency_ms": latency_ms,
+                "perception_mode": getattr(self, "_current_perception_mode", "vision")
             }
         })
 

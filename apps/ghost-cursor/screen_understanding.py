@@ -99,6 +99,7 @@ class ScreenContext:
     element_count: int = 0
     timestamp: str = ""
     available: bool = False   # False when bridge was unreachable or returned an error
+    error_code: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +186,7 @@ async def _fetch(ax_uri: str) -> ScreenContext:
             element_count=0,
             timestamp=data.get("timestamp", ""),
             available=False,
+            error_code=data.get("error")
         )
 
     # --- Normalise elements ---

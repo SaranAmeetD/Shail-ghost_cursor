@@ -86,7 +86,8 @@ def test_log_step_result(active_logger, dummy_plan):
             "action": "click",
             "success": True,
             "verified": True,
-            "latency_ms": 150.5
+            "latency_ms": 150.5,
+            "perception_mode": "vision"
         }
     )
 
@@ -106,7 +107,8 @@ def test_log_step_result_failure(active_logger, dummy_plan):
             "action": "type",
             "success": False,
             "verified": False,
-            "latency_ms": 320.0
+            "latency_ms": 320.0,
+            "perception_mode": "vision"
         }
     )
 

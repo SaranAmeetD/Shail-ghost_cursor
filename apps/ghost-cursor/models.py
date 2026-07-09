@@ -68,3 +68,4 @@ class GuidancePlan(BaseModel):
     """
     schema_version: Literal["1"] = "1"
     steps: List[GuidancePlanStep]
+    perception_mode: Literal["ax", "vision"] = "vision"
